@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QuantDesk — ASX &amp; NSE Stock Analysis Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --c-accent:  #1D9E75;
+    --c-accent2: #185FA5;
+    --c-danger:  #D85A30;
+    --c-warn:    #BA7517;
+    --c-bg:      #f5f5f3;
+    --c-card:    #ffffff;
+    --c-surface: #f1efe8;
+    --c-border:  rgba(0,0,0,0.1);
+    --c-text:    #1a1a18;
+    --c-muted:   #6b6b67;
+    --c-hint:    #9b9b97;
+    --mono: 'DM Mono', monospace;
+    --display: 'Syne', sans-serif;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --c-bg:     #1a1a18;
+      --c-card:   #242422;
+      --c-surface:#2c2c2a;
+      --c-border: rgba(255,255,255,0.1);
+      --c-text:   #f0ede6;
+      --c-muted:  #9b9b97;
+      --c-hint:   #6b6b67;
+    }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--mono);
+    background: var(--c-bg);
+    color: var(--c-text);
+    min-height: 100vh;
+    padding: 16px;
+  }
+
+  .dash { max-width: 1100px; margin: 0 auto; }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 12px 16px;
+    background: var(--c-card);
+    border: 0.5px solid var(--c-border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 14px;
+  }
+  .topbar-logo {
+    font-family: var(--display); font-weight: 800; font-size: 16px;
+    letter-spacing: -0.5px; color: var(--c-text);
+  }
+  .topbar-logo span { color: var(--c-accent); }
+  .exchange-tabs { display: flex; gap: 4px; }
+  .etab {
+    padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 500;
+    border: 0.5px solid var(--c-border); cursor: pointer;
+    background: transparent; color: var(--c-muted);
+    font-family: var(--mono); transition: all 0.15s;
+  }
+  .etab.active { background: var(--c-accent); color: #fff; border-color: var(--c-accent); }
+  .search-row { display: flex; gap: 8px; flex: 1; min-width: 200px; }
+  .search-row input, .search-row select {
+    flex: 1; padding: 6px 10px; font-size: 12px; font-family: var(--mono);
+    border: 0.5px solid var(--c-border); border-radius: 6px;
+    background: var(--c-surface); color: var(--c-text);
+    outline: none;
+  }
+  .search-row input:focus, .search-row select:focus {
+    border-color: var(--c-accent);
+  }
+  .btn-run {
+    padding: 6px 16px; background: var(--c-accent); color: #fff;
+    border: none; border-radius: 6px; font-size: 12px; font-weight: 500;
+    cursor: pointer; font-family: var(--mono); white-space: nowrap;
+    transition: opacity 0.15s;
+  }
+  .btn-run:hover { opacity: 0.85; }
+  .btn-scan {
+    padding: 6px 14px; background: var(--c-accent2); color: #fff;
+    border: none; border-radius: 6px; font-size: 12px; font-weight: 500;
+    cursor: pointer; font-family: var(--mono); white-space: nowrap;
+  }
+  .mode-pill {
+    display: inline-flex; border: 0.5px solid var(--c-border); border-radius: 6px; overflow: hidden;
+  }
+  .mode-pill button {
+    padding: 5px 11px; font-size: 11px; background: transparent; border: none;
+    cursor: pointer; font-family: var(--mono); color: var(--c-muted);
+  }
+  .mode-pill button.active { background: var(--c-surface); color: var(--c-text); font-weight: 500; }
+
+  /* ── Scan config ── */
+  .scan-config {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 14px;
+    background: var(--c-card); border: 0.5px solid var(--c-border);
+    border-radius: var(--radius-lg); margin-bottom: 14px;
+    font-size: 12px; color: var(--c-muted);
+  }
+  .scan-config input[type=range] { width: 120px; }
+  .scan-config .thr-val { font-size: 12px; font-weight: 500; color: var(--c-text); min-width: 34px; }
+
+  /* ── Loader ── */
+  .loader {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; padding: 48px; color: var(--c-muted); font-size: 13px;
+  }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--c-border);
+    border-top-color: var(--c-accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Grid helpers ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 12px; }
+  @media (max-width: 640px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 420px) {
+    .grid-4 { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--c-card); border: 0.5px solid var(--c-border);
+    border-radius: var(--radius-lg); padding: 14px 16px;
+  }
+  .card-title {
+    font-size: 10px; font-weight: 500; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--c-hint); margin-bottom: 8px;
+  }
+  .metric-val {
+    font-family: var(--display); font-size: 22px; font-weight: 700;
+    color: var(--c-text); line-height: 1.1;
+  }
+  .metric-sub { font-size: 11px; color: var(--c-muted); margin-top: 3px; }
+
+  /* ── Colours ── */
+  .up  { color: #27500A; } @media (prefers-color-scheme:dark) { .up  { color: #9FE1CB; } }
+  .dn  { color: #A32D2D; } @media (prefers-color-scheme:dark) { .dn  { color: #F0997B; } }
+  .neu { color: #633806; } @media (prefers-color-scheme:dark) { .neu { color: #FAC775; } }
+
+  /* ── Hero ── */
+  .hero-row {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px; margin-bottom: 12px;
+  }
+  .ticker-chip {
+    font-family: var(--display); font-size: 20px; font-weight: 700;
+    color: var(--c-text); letter-spacing: -0.5px;
+  }
+  .ticker-name { font-size: 12px; color: var(--c-muted); margin-top: 2px; }
+  .price-big {
+    font-family: var(--display); font-size: 30px; font-weight: 800;
+    color: var(--c-text); letter-spacing: -1px;
+  }
+  .change-pill {
+    display: inline-block; font-size: 12px; font-weight: 500;
+    padding: 3px 9px; border-radius: 20px; margin-left: 8px;
+  }
+
+  /* ── Verdict card ── */
+  .verdict-card {
+    background: var(--c-card); border: 0.5px solid var(--c-border);
+    border-radius: var(--radius-lg); padding: 14px 16px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .verdict-badge {
+    font-family: var(--display); font-size: 22px; font-weight: 800;
+    padding: 8px 18px; border-radius: 8px; letter-spacing: -0.5px;
+    white-space: nowrap;
+  }
+  .vb-BUY        { background: #EAF3DE; color: #27500A; }
+  .vb-STRONGBUY  { background: #C0DD97; color: #173404; }
+  .vb-HOLD       { background: #FAEEDA; color: #633806; }
+  .vb-SELL       { background: #FCEBEB; color: #501313; }
+  .vb-STRONGSELL { background: #F7C1C1; color: #501313; }
+  .verdict-info { min-width: 130px; }
+  .vi-label { font-size: 10px; color: var(--c-hint); letter-spacing: 0.06em; text-transform: uppercase; }
+  .vi-val   { font-size: 14px; font-weight: 500; color: var(--c-text); margin-top: 2px; }
+
+  /* ── Tab nav ── */
+  .tab-nav {
+    display: flex; gap: 4px; margin-bottom: 12px;
+    border-bottom: 0.5px solid var(--c-border); padding-bottom: 8px;
+    overflow-x: auto;
+  }
+  .tnav-btn {
+    padding: 5px 12px; font-size: 11px; font-weight: 500;
+    background: transparent; border: none; cursor: pointer;
+    font-family: var(--mono); color: var(--c-muted);
+    border-radius: 5px; transition: all 0.12s; white-space: nowrap;
+  }
+  .tnav-btn.active { background: var(--c-surface); color: var(--c-text); }
+
+  .pane { display: none; }
+  .pane.active { display: block; }
+
+  /* ── Section head ── */
+  .section-head {
+    font-size: 10px; font-weight: 500; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--c-hint);
+    margin: 14px 0 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .section-head::after { content: ''; flex: 1; height: 0.5px; background: var(--c-border); }
+
+  /* ── Bar rows ── */
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .bar-label { font-size: 11px; color: var(--c-muted); width: 140px; flex-shrink: 0; }
+  .bar-track { flex: 1; height: 7px; background: var(--c-surface); border-radius: 4px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 4px; transition: width 0.6s cubic-bezier(.4,0,.2,1); }
+  .bar-score { font-size: 11px; font-weight: 500; width: 42px; text-align: right; }
+
+  /* ── Signal grid ── */
+  .signal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .signal-row {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; padding: 6px 10px;
+    background: var(--c-surface); border-radius: 6px;
+  }
+  .signal-key { color: var(--c-muted); }
+
+  /* ── Tags ── */
+  .tag {
+    font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 4px; letter-spacing: 0.04em;
+  }
+  .tag-buy  { background: #EAF3DE; color: #3B6D11; }
+  .tag-sell { background: #FCEBEB; color: #A32D2D; }
+  .tag-hold { background: #FAEEDA; color: #854F0B; }
+  .tag-neu  { background: var(--c-surface); color: var(--c-muted); border: 0.5px solid var(--c-border); }
+
+  /* ── Fund table ── */
+  .fund-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .fund-table tr:not(:last-child) td { border-bottom: 0.5px solid var(--c-border); }
+  .fund-table td { padding: 5px 0; }
+  .fund-table td:first-child { color: var(--c-muted); }
+  .fund-table td:last-child { text-align: right; font-weight: 500; color: var(--c-text); }
+
+  /* ── Chart wrappers ── */
+  .price-chart-wrap { height: 180px; position: relative; }
+  .mini-chart-wrap  { height: 110px; position: relative; }
+  .chart-wrap-180   { height: 180px; position: relative; }
+  .chart-wrap-220   { height: 220px; position: relative; }
+
+  /* ── GT cells ── */
+  .gt-matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .gt-cell { background: var(--c-surface); border-radius: 6px; padding: 8px 10px; font-size: 11px; }
+  .gt-cell .gtc-label { color: var(--c-muted); margin-bottom: 4px; }
+  .gt-cell .gtc-val   { font-weight: 500; font-size: 13px; color: var(--c-text); }
+
+  /* ── NE players ── */
+  .ne-player-row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .ne-player { flex: 1; min-width: 120px; background: var(--c-surface); border-radius: 6px; padding: 8px 10px; font-size: 11px; }
+  .ne-player .nep-label { color: var(--c-muted); margin-bottom: 4px; }
+
+  /* ── PD matrix ── */
+  .pd-matrix {
+    display: grid; grid-template-columns: auto 1fr 1fr; gap: 1px;
+    background: var(--c-border);
+    border: 0.5px solid var(--c-border); border-radius: 8px; overflow: hidden;
+    font-size: 11px; margin-top: 8px;
+  }
+  .pdm-cell { background: var(--c-card); padding: 7px 10px; text-align: center; }
+  .pdm-head { background: var(--c-surface); font-weight: 500; color: var(--c-muted); }
+  .pdm-r { background: #EAF3DE; color: #27500A; font-weight: 500; }
+  .pdm-t { background: #FAEEDA; color: #633806; font-weight: 500; }
+  .pdm-s { background: #FCEBEB; color: #501313; font-weight: 500; }
+  .pdm-p { background: #FAECE7; color: #4A1B0C; font-weight: 500; }
+
+  /* ── Scan table ── */
+  .scan-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .scan-table th { padding: 6px 8px; text-align: left; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--c-hint); border-bottom: 0.5px solid var(--c-border); white-space: nowrap; }
+  .scan-table td { padding: 7px 8px; border-bottom: 0.5px solid var(--c-border); }
+  .scan-table tr:last-child td { border-bottom: none; }
+  .scan-table tbody tr { cursor: pointer; transition: background 0.1s; }
+  .scan-table tbody tr:hover td { background: var(--c-surface); }
+
+  /* ── Disclaimer ── */
+  .disclaimer {
+    margin-top: 16px; padding: 10px 14px; font-size: 10px;
+    color: var(--c-hint); background: var(--c-surface);
+    border-radius: 6px; border-left: 2px solid var(--c-border); line-height: 1.6;
+  }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="dash" id="app">
+
+  <!-- ── Top bar ── -->
+  <div class="topbar">
+    <div class="topbar-logo">QUANT<span>DESK</span></div>
+    <div class="exchange-tabs">
+      <button class="etab active" onclick="setExchange('ASX',this)">ASX</button>
+      <button class="etab"        onclick="setExchange('NSE',this)">NSE 50</button>
+    </div>
+    <div class="search-row">
+      <input type="text" id="tickerInput" placeholder="e.g. CBA, BHP, CSL" />
+      <select id="periodSelect">
+        <option value="1mo">1 Month</option>
+        <option value="3mo">3 Months</option>
+        <option value="6mo">6 Months</option>
+        <option value="1y" selected>1 Year</option>
+        <option value="2y">2 Years</option>
+      </select>
+      <button class="btn-run" onclick="runAnalysis()">Analyse ↗</button>
+    </div>
+    <div class="mode-pill" id="modePill">
+      <button class="active" onclick="setView('single',this)">Single</button>
+      <button onclick="setView('scan',this)">Deep Scan</button>
+    </div>
+  </div>
+
+  <!-- ── Scan config bar ── -->
+  <div id="scanConfig" class="scan-config hidden">
+    <span>Drawdown threshold</span>
+    <input type="range" id="scanThreshold" min="20" max="60" value="40" step="1"
+           oninput="document.getElementById('thrVal').textContent=this.value+'%'" />
+    <span class="thr-val" id="thrVal">40%</span>
+    <button class="btn-scan" onclick="runScan()">Run Deep Scan ↗</button>
+  </div>
+
+  <!-- ── Loader ── -->
+  <div id="loadingEl" class="loader hidden">
+    <div class="spinner"></div>
+    <span id="loadingText">Fetching data...</span>
+  </div>
+
+  <!-- ══════════════════════ SINGLE VIEW ══════════════════════ -->
+  <div id="singleView">
+
+    <!-- Hero -->
+    <div id="heroSection" class="hidden">
+      <div class="hero-row">
+        <div>
+          <div class="ticker-chip" id="heroTicker">—</div>
+          <div class="ticker-name" id="heroName">—</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="price-big" id="heroPrice">—</div>
+          <div>
+            <span id="heroChange" class="change-pill">—</span>
+            <span style="font-size:11px;color:var(--c-hint);margin-left:6px;" id="heroDate">—</span>
+          </div>
+        </div>
+      </div>
+      <div id="verdictCard" class="verdict-card">
+        <div class="verdict-badge vb-HOLD" id="verdictBadge">—</div>
+        <div class="verdict-info">
+          <div class="vi-label">Quant Score</div>
+          <div class="vi-val" id="vQuant">—</div>
+        </div>
+        <div class="verdict-info">
+          <div class="vi-label">Game Theory Score</div>
+          <div class="vi-val" id="vGT">—</div>
+        </div>
+        <div class="verdict-info">
+          <div class="vi-label">Drawdown from 52W High</div>
+          <div class="vi-val" id="vDD">—</div>
+        </div>
+        <div class="verdict-info">
+          <div class="vi-label">EMA-10 Trend</div>
+          <div class="vi-val" id="vEMA">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="mainContent" class="hidden">
+      <div class="tab-nav">
+        <button class="tnav-btn active" onclick="showPane('overview',this)" title="Summary of key metrics and trend analysis">Overview</button>
+        <button class="tnav-btn" onclick="showPane('quant',this)" title="Momentum, volatility, RSI, and trend strength scores">Quant</button>
+        <button class="tnav-btn" onclick="showPane('gametheory',this)" title="Nash Equilibrium and Prisoner's Dilemma analysis">Game Theory</button>
+        <button class="tnav-btn" onclick="showPane('fundamentals',this)" title="Valuation, profitability, and balance sheet metrics">Fundamentals</button>
+        <button class="tnav-btn" onclick="showPane('technicals',this)" title="Moving averages, momentum, and support/resistance">Technicals</button>
+      </div>
+
+      <!-- ── Overview ── -->
+      <div id="pane-overview" class="pane active">
+        <div class="card" style="margin-bottom:12px; background:#e8f0fb; border-left:3px solid #185FA5;">
+          <div style="font-size:12px; color:#1D3F7D; line-height:1.6;">
+            <strong>📊 Overview — Quick Summary</strong><br/>
+            Combines Quant scores (technical momentum & volatility) and Game Theory analysis (institutional vs retail alignment) into a unified verdict. Key KPIs show RSI (momentum), Volume Ratio (institutional activity), 52-week High (valuation context), and Moving Averages (trend confirmation). Use this to get a quick assessment before diving into detailed analysis.
+          </div>
+        </div>
+        <div class="grid-4" id="kpiRow"></div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Price history</div>
+            <div class="price-chart-wrap"><canvas id="priceChart" role="img" aria-label="Price history"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Volume</div>
+            <div class="mini-chart-wrap"><canvas id="volChart" role="img" aria-label="Volume chart"></canvas></div>
+            <div style="margin-top:10px;">
+              <div class="bar-row"><span class="bar-label">Momentum</span><div class="bar-track"><div class="bar-fill" id="ob-mom"></div></div><span class="bar-score" id="os-mom">—</span></div>
+              <div class="bar-row"><span class="bar-label">Mean-Reversion</span><div class="bar-track"><div class="bar-fill" id="ob-mr"></div></div><span class="bar-score" id="os-mr">—</span></div>
+              <div class="bar-row"><span class="bar-label">Trend Strength</span><div class="bar-track"><div class="bar-fill" id="ob-tr"></div></div><span class="bar-score" id="os-tr">—</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Key technical signals</div>
+            <div class="signal-grid" id="sigGrid"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Moving averages</div>
+            <table class="fund-table" id="maTable"></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Quant ── -->
+      <div id="pane-quant" class="pane">
+        <div class="card" style="margin-bottom:12px; background:#f5f9f0; border-left:3px solid #639922;">
+          <div style="font-size:12px; color:#27500A; line-height:1.6;">
+            <strong>📊 Quantitative Analysis</strong><br/>
+            Measures technical momentum, volatility, and mean-reversion patterns. Higher scores (60+) indicate bullish momentum; lower scores (20-40) suggest pullback opportunities. Components include: Momentum (price trends), Mean-Reversion (oversold/overbought), Volatility (risk assessment), Volume Surge (institutional activity), RSI (overbought/oversold), and Trend Strength (EMA slope).
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:12px;">
+          <div class="card-title">Quantitative score breakdown</div>
+          <div id="quantBars" style="margin-top:6px;"></div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Score radar</div>
+            <div class="chart-wrap-220"><canvas id="radarChart" role="img" aria-label="Radar chart of quant scores"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Signal details</div>
+            <table class="fund-table" id="quantDetail"></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Game Theory ── -->
+      <div id="pane-gametheory" class="pane">
+        <div class="card" style="margin-bottom:12px; background:#faf6f0; border-left:3px solid #EF9F27;">
+          <div style="font-size:12px; color:#633806; line-height:1.6;">
+            <strong>🎮 Game Theory Analysis</strong><br/>
+            Models market dynamics as a 3-player game between institutional investors, retail traders, and market makers. Uses two frameworks:
+            <br/><strong>• NASH Equilibrium:</strong> Dominant strategy where no player benefits from unilateral change (e.g., all BUY, all SELL, or mixed).
+            <br/><strong>• Prisoner's Dilemma:</strong> Payoff analysis where "Cooperate" (accumulate) vs "Defect" (distribute). When mutual payoffs favor cooperation, expect BUY signals.
+            <br/>Scores 60+ = Bullish alignment, 40-60 = Divergence, <40 = Bearish consensus.
+          </div>
+        </div>
+        <div class="section-head">Nash Equilibrium — Player Signals</div>
+        <div class="ne-player-row" id="nePlayers"></div>
+        <div class="grid-2" style="margin-bottom:12px;">
+          <div class="card">
+            <div class="card-title">Nash equilibrium result</div>
+            <div class="gt-matrix" id="neMatrix" style="margin-top:6px;"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Institutional vs retail divergence</div>
+            <div class="gt-matrix" id="divMatrix" style="margin-top:6px;"></div>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:12px; background:#fbe8e8; border-left:3px solid #E24B4A;">
+          <div style="font-size:12px; color:#A32D2D; line-height:1.6;">
+            <strong>⚙️ Prisoner's Dilemma — Payoff Analysis</strong><br/>
+            Each player chooses to "Cooperate" (accumulate) or "Defect" (distribute). Payoffs: <strong>R</strong> = mutual cooperation reward → High price · <strong>T</strong> = betrayal temptation when other cooperates → Quick breakout · <strong>S</strong> = sucker loss when you cooperate, other defects → Liquidation risk · <strong>P</strong> = mutual defection punishment → Drawn-out decline. Chart shows when rational players choose to cooperate (BUY) or defect (SELL).
+          </div>
+        </div>
+        <div class="section-head">Prisoner's Dilemma Payoff Matrix</div>
+        <div class="card" style="margin-bottom:12px;">
+          <div class="card-title">Payoff: R=reward &nbsp; T=temptation &nbsp; S=sucker &nbsp; P=punishment</div>
+          <div id="pdMatrix"></div>
+          <div style="margin-top:10px;font-size:11px;color:var(--c-muted);">
+            Rational choice: <span id="pdChoice" style="font-weight:500;color:var(--c-text);"></span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Game theory score breakdown</div>
+          <div id="gtBars" style="margin-top:6px;"></div>
+        </div>
+      </div>
+
+      <!-- ── Fundamentals ── -->
+      <div id="pane-fundamentals" class="pane">
+        <div class="card" style="margin-bottom:12px; background:#f0f9f2; border-left:3px solid #1D9E75;">
+          <div style="font-size:12px; color:#0D5A3A; line-height:1.6;">
+            <strong>🏢 Fundamentals — Company Health</strong><br/>
+            <strong>Valuation:</strong> P/E (earnings multiple), Forward P/E (growth), P/B (book value), EV/EBITDA (enterprise value). <strong>Profitability:</strong> Revenue growth, Gross/Net margins (efficiency), ROE/ROA (shareholder return). <strong>Balance Sheet:</strong> Debt levels, Cash position, Current Ratio (liquidity). <strong>Dividends:</strong> Yield %, payout ratio, analyst rating. Low P/E + High margins + Strong cash = Financially healthy.
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="card"><div class="card-title">Valuation</div><table class="fund-table" id="fundVal"></table></div>
+          <div class="card"><div class="card-title">Profitability</div><table class="fund-table" id="fundProfit"></table></div>
+        </div>
+        <div class="grid-2">
+          <div class="card"><div class="card-title">Balance sheet</div><table class="fund-table" id="fundBal"></table></div>
+          <div class="card"><div class="card-title">Dividends &amp; analyst</div><table class="fund-table" id="fundDiv"></table></div>
+        </div>
+      </div>
+
+      <!-- ── Technicals ── -->
+      <div id="pane-technicals" class="pane">
+        <div class="card" style="margin-bottom:12px; background:#f5f0f8; border-left:3px solid #9653AA;">
+          <div style="font-size:12px; color:#5A2D68; line-height:1.6;">
+            <strong>📈 Technicals — Chart Patterns & Indicators</strong><br/>
+            <strong>RSI (14):</strong> 0-30 = Oversold (potential BUY), 70-100 = Overbought (potential SELL), 50 = Neutral. <strong>MACD:</strong> Shows momentum; crossover above signal line = bullish, below = bearish. <strong>Bollinger Bands:</strong> Price touching lower band = oversold, upper = overbought. <strong>Oscillators:</strong> Primary indicators include Stochastic, Williams %R, and Awesome.
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="card"><div class="card-title">Oscillators</div><table class="fund-table" id="techOsc"></table></div>
+          <div class="card"><div class="card-title">Bollinger bands &amp; volatility</div><table class="fund-table" id="techVol"></table></div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">MACD</div>
+            <div class="chart-wrap-180"><canvas id="macdChart" role="img" aria-label="MACD chart"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-title">RSI (14)</div>
+            <div class="chart-wrap-180"><canvas id="rsiChart" role="img" aria-label="RSI chart"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════ SCAN VIEW ══════════════════════ -->
+  <div id="scanView" class="hidden">
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-title" id="scanTitle">Deep scan results</div>
+      <div id="scanResults">
+        <div style="font-size:12px;color:var(--c-muted);padding:24px 0;text-align:center;">
+          Press "Run Deep Scan" to screen stocks across the exchange.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    QuantDesk is for informational purposes only and does not constitute financial advice.
+    All scores are model-derived estimates based on simulated data seeded from ticker names.
+    To connect live data, replace <code>generateHist()</code> with your Python backend API output.
+    Past performance does not predict future results.
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════
+   DATA DICTIONARIES
+═══════════════════════════════════════════════════════════ */
+const ASX_STOCKS = {
+  CBA:"Commonwealth Bank",WBC:"Westpac Banking",ANZ:"ANZ Group",NAB:"Natl Australia Bank",MQG:"Macquarie Group",
+  SUN:"Suncorp Group",QBE:"QBE Insurance",IAG:"Insurance Australia",
+  BHP:"BHP Group",RIO:"Rio Tinto",FMG:"Fortescue Ltd",NCM:"Newcrest Mining",
+  S32:"South32",MIN:"Mineral Resources",PLS:"Pilbara Minerals",LYC:"Lynas Rare Earths",
+  WDS:"Woodside Energy",STO:"Santos",ORG:"Origin Energy",NHC:"New Hope Corp",
+  WOW:"Woolworths Group",COL:"Coles Group",TWE:"Treasury Wine",A2M:"a2 Milk",
+  CSL:"CSL Limited",RMD:"ResMed",COH:"Cochlear",SHL:"Sonic Healthcare",PME:"Pro Medicus",
+  XRO:"Xero",WTC:"WiseTech Global",CPU:"Computershare",CAR:"CAR Group",REA:"REA Group",
+  GMG:"Goodman Group",SCG:"Scentre Group",VCX:"Vicinity Centres",CHC:"Charter Hall",
+  TCL:"Transurban",APA:"APA Group",ALX:"Atlas Arteria",QAN:"Qantas",AGL:"AGL Energy"
+};
+const NSE_STOCKS = {
+  RELIANCE:"Reliance Industries",HDFCBANK:"HDFC Bank",ICICIBANK:"ICICI Bank",AXISBANK:"Axis Bank",
+  KOTAKBANK:"Kotak Mahindra Bank",TCS:"Tata Consultancy",INFY:"Infosys",WIPRO:"Wipro",TECHM:"Tech Mahindra",
+  MARUTI:"Maruti Suzuki",BAJAJFINSV:"Bajaj Finserv","BAJAJ-AUTO":"Bajaj Auto",TATAMOTORS:"Tata Motors",
+  EICHERMOT:"Eicher Motors",JSWSTEEL:"JSW Steel",TATASTEEL:"Tata Steel",ADANIPORTS:"Adani Ports",
+  SUNPHARMA:"Sun Pharma",DRREDDY:"Dr Reddy's",CIPLA:"Cipla",DIVISLAB:"Divi's Labs",
+  HINDUNILVR:"Hindustan Unilever",ITC:"ITC",NESTLEIND:"Nestlé India",BRITANNIA:"Britannia",
+  ONGC:"ONGC",NTPC:"NTPC",POWERGRID:"Power Grid",BHARTIARTL:"Bharti Airtel",SBIN:"State Bank of India",DLF:"DLF"
+};
+
+/* ═══════════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════════ */
+let currentExchange = 'ASX';
+let currentView     = 'single';
+let state = {};
+let priceChartInst, volChartInst, radarChartInst, macdChartInst, rsiChartInst;
+
+/* ═══════════════════════════════════════════════════════════
+   UI HELPERS
+═══════════════════════════════════════════════════════════ */
+function setExchange(ex, btn) {
+  currentExchange = ex;
+  document.querySelectorAll('.etab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tickerInput').placeholder =
+    ex === 'ASX' ? 'e.g. CBA, BHP, CSL' : 'e.g. RELIANCE, TCS, INFY';
+}
+
+function setView(v, btn) {
+  currentView = v;
+  document.querySelectorAll('.mode-pill button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('scanConfig').classList.toggle('hidden', v !== 'scan');
+  document.getElementById('singleView').classList.toggle('hidden', v !== 'single');
+  document.getElementById('scanView').classList.toggle('hidden', v !== 'scan');
+}
+
+function showPane(id, btn) {
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tnav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('pane-' + id).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (id === 'technicals' && state.hist) setTimeout(() => renderMACDRSI(state.hist), 50);
+  if (id === 'quant'      && state.quant) setTimeout(() => renderRadar(state.quant), 50);
+}
+
+function loading(show, text) {
+  document.getElementById('loadingEl').classList.toggle('hidden', !show);
+  if (text) document.getElementById('loadingText').textContent = text;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   API CONNECTION  (Fetch data from Python backend)
+═══════════════════════════════════════════════════════════ */
+const API_BASE = 'http://localhost:8000';
+
+async function fetchFromAPI(ticker, period='1y', market='ASX') {
+  try {
+    const response = await fetch(`${API_BASE}/api/stock?ticker=${ticker}&period=${period}&market=${market}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (data.status !== 'success') throw new Error(data.error || 'API error');
+    return data;
+  } catch (err) {
+    console.log(`API unavailable (${err.message}). Using demo data instead.`);
+    return null;
+  }
+}
+
+async function scanFromAPI(threshold=40, market='ASX') {
+  try {
+    const response = await fetch(`${API_BASE}/api/scan?threshold=${threshold}&market=${market}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (data.status !== 'success') throw new Error(data.error || 'API error');
+    return data;
+  } catch (err) {
+    console.log(`API unavailable (${err.message}). Using demo data instead.`);
+    return null;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FORMAT HELPERS
+═══════════════════════════════════════════════════════════ */
+function scoreColor(s)    { return s >= 65 ? '#27500A' : s >= 45 ? '#633806' : '#A32D2D'; }
+function scoreBarColor(s) { return s >= 65 ? '#639922' : s >= 45 ? '#EF9F27' : '#E24B4A'; }
+
+function tagClass(sig) {
+  const u = (sig||'').toUpperCase();
+  if (u.includes('BUY') || u.includes('COOPERATE') || u.includes('UPTREND')) return 'tag-buy';
+  if (u.includes('SELL') || u.includes('DEFECT') || u.includes('DOWNTREND')) return 'tag-sell';
+  return 'tag-hold';
+}
+function tagHTML(sig) {
+  return `<span class="tag ${tagClass(sig)}">${sig}</span>`;
+}
+
+function fmtP(v, sym) {
+  if (v == null || isNaN(v)) return 'N/A';
+  return sym + parseFloat(v).toFixed(2);
+}
+function fmtPct(v) {
+  if (v == null || isNaN(v)) return 'N/A';
+  const f = parseFloat(v);
+  return (f >= 0 ? '+' : '') + f.toFixed(2) + '%';
+}
+function fmtLarge(v, sym) {
+  if (v == null || isNaN(v)) return 'N/A';
+  v = parseFloat(v);
+  if (Math.abs(v) >= 1e12) return sym + (v/1e12).toFixed(2) + 'T';
+  if (Math.abs(v) >= 1e9)  return sym + (v/1e9).toFixed(2) + 'B';
+  if (Math.abs(v) >= 1e6)  return sym + (v/1e6).toFixed(2) + 'M';
+  return sym + v.toFixed(0);
+}
+
+function makeBars(containerId, items) {
+  document.getElementById(containerId).innerHTML = items.map(([label, score]) => {
+    const s = parseFloat(score) || 0;
+    const bold = label.startsWith('▶');
+    return `<div class="bar-row">
+      <span class="bar-label" style="${bold?'font-weight:500;':''}color:${bold?'var(--c-text)':'var(--c-muted)'}">${label}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${s}%;background:${scoreBarColor(s)};"></div></div>
+      <span class="bar-score" style="color:${scoreColor(s)};${bold?'font-weight:700;':''}">${s.toFixed(1)}</span>
+    </div>`;
+  }).join('');
+}
+
+function makeTable(id, rows) {
+  document.getElementById(id).innerHTML = rows.map(([k, v, cls]) =>
+    `<tr><td>${k}</td><td class="${cls||''}">${v}</td></tr>`
+  ).join('');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DATA SIMULATION  (seeded deterministic pseudo-random)
+═══════════════════════════════════════════════════════════ */
+function rng(seed) { let x = Math.sin(seed) * 10000; return x - Math.floor(x); }
+
+function generateHist(ticker) {
+  const seed = ticker.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const n = 252;
+  const hist = [];
+  let price = 20 + rng(seed) * 80;
+  let trend = (rng(seed + 1) - 0.5) * 0.002;
+  const now = new Date();
+  for (let i = n; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    if (d.getDay() === 0 || d.getDay() === 6) continue;
+    const drift = trend + (rng(seed + i + 2) - 0.5) * 0.025;
+    price = Math.max(1, price * (1 + drift));
+    trend += (rng(seed + i + 3) - 0.5) * 0.0005;
+    hist.push({
+      date: d.toISOString().slice(0, 10),
+      c: parseFloat(price.toFixed(4)),
+      h: parseFloat((price * (1 + rng(seed + i + 4) * 0.015)).toFixed(4)),
+      l: parseFloat((price * (1 - rng(seed + i + 5) * 0.015)).toFixed(4)),
+      v: Math.floor(500000 + rng(seed + i + 6) * 4500000)
+    });
+  }
+  return hist;
+}
+
+function generateFundamentals(ticker, sym) {
+  const seed = ticker.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const r = (s, min, max) => min + rng(s + seed) * (max - min);
+  const mc = r(1, 1e9, 2e11);
+  return {
+    'Market Cap':    fmtLarge(mc, sym),
+    'P/E (TTM)':     r(2, 8, 45).toFixed(1),
+    'Forward P/E':   r(3, 7, 38).toFixed(1),
+    'P/B Ratio':     r(4, 0.5, 6).toFixed(2),
+    'EV/EBITDA':     r(5, 5, 25).toFixed(1),
+    'Revenue':       fmtLarge(mc * r(6, 0.2, 2), sym),
+    'Gross Margin':  r(7, 15, 65).toFixed(1) + '%',
+    'Net Margin':    r(8, 3, 30).toFixed(1) + '%',
+    'ROE':           r(9, 5, 35).toFixed(1) + '%',
+    'ROA':           r(10, 2, 18).toFixed(1) + '%',
+    'Total Debt':    fmtLarge(mc * r(11, 0.1, 0.8), sym),
+    'Total Cash':    fmtLarge(mc * r(12, 0.05, 0.3), sym),
+    'Debt/Equity':   r(13, 0.1, 2.5).toFixed(2),
+    'Current Ratio': r(14, 0.8, 3.5).toFixed(2),
+    'Dividend Yield':r(15, 0, 6).toFixed(2) + '%',
+    'Payout Ratio':  r(16, 0, 80).toFixed(1) + '%',
+    'EPS (TTM)':     sym + r(17, 0.5, 12).toFixed(2),
+    'Target Price':  sym + r(18, 10, 200).toFixed(2),
+    'Recommendation':['STRONG BUY','BUY','HOLD','SELL'][Math.floor(r(19, 0, 3.99))],
+    '# Analysts':    Math.floor(r(20, 3, 25)),
+    'Beta':          r(21, 0.4, 2.2).toFixed(2)
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   QUANT ENGINE
+═══════════════════════════════════════════════════════════ */
+function simulateQuant(hist) {
+  const closes = hist.map(d => d.c);
+  const vols   = hist.map(d => d.v);
+  const n = closes.length;
+  if (n < 30) return null;
+
+  const last = closes[n - 1];
+  const ret5  = (last - closes[Math.max(0,n-6)])  / closes[Math.max(0,n-6)]  * 100;
+  const ret21 = (last - closes[Math.max(0,n-22)]) / closes[Math.max(0,n-22)] * 100;
+  const ret63 = n > 65 ? (last - closes[n-64]) / closes[n-64] * 100 : ret21;
+
+  const norm = (r, cap = 20) => Math.max(0, Math.min(100, 50 + r / cap * 50));
+  const momScore = norm(ret5)*0.3 + norm(ret21)*0.4 + norm(ret63)*0.3;
+
+  const win20 = closes.slice(-20);
+  const mu  = win20.reduce((a,b) => a+b, 0) / 20;
+  const sig = Math.sqrt(win20.reduce((a,b) => a+(b-mu)**2, 0) / 20);
+  const z   = (last - mu) / (sig + 1e-9);
+  const mrScore = Math.max(0, Math.min(100, 50 - z * 25));
+
+  const daily = closes.slice(-31).map((c,i,a) => i ? (c-a[i-1])/a[i-1] : 0).slice(1);
+  const rv30  = Math.sqrt(daily.reduce((a,b) => a+b**2, 0) / daily.length * 252) * 100;
+  const volScore = Math.max(10, Math.min(90, 90 - (rv30 - 20) / 60 * 80));
+
+  const vol5  = vols.slice(-5).reduce((a,b) => a+b, 0) / 5;
+  const vol20 = vols.slice(-20).reduce((a,b) => a+b, 0) / 20;
+  const vr    = vol5 / (vol20 + 1e-9);
+  const vsScore = Math.max(0, Math.min(100, 50 + (vr - 1) * 33));
+
+  const delta = closes.map((c,i,a) => i ? c-a[i-1] : 0);
+  const gains  = delta.map(d => d > 0 ? d : 0);
+  const losses = delta.map(d => d < 0 ? -d : 0);
+  let ag = gains.slice(1,15).reduce((a,b)=>a+b,0)/14;
+  let al = losses.slice(1,15).reduce((a,b)=>a+b,0)/14;
+  for (let i = 15; i < n; i++) { ag=(ag*13+gains[i])/14; al=(al*13+losses[i])/14; }
+  const rsi     = 100 - 100 / (1 + ag / (al + 1e-9));
+  const rsiScore = Math.max(0, Math.min(100, 50 + (50 - rsi) * 80 / 50));
+
+  const ema10arr = [closes[0]];
+  const kE = 2/11;
+  for (let i=1;i<n;i++) ema10arr.push(closes[i]*kE + ema10arr[i-1]*(1-kE));
+  const slope = (ema10arr[n-1] - ema10arr[n-6]) / (ema10arr[n-6] + 1e-9) * 100;
+  const trendScore = Math.max(0, Math.min(100, 50 + slope * 20));
+
+  const composite = momScore*0.20 + mrScore*0.25 + volScore*0.10 + vsScore*0.15 + rsiScore*0.15 + trendScore*0.15;
+
+  const ema = (span) => {
+    const k2 = 2/(span+1); let e = closes[0];
+    closes.forEach(c => { e = c*k2 + e*(1-k2); });
+    return e;
+  };
+  const vwap = closes.map((c,i) => c*vols[i]).reduce((a,b)=>a+b,0) / vols.reduce((a,b)=>a+b,1);
+  const w52h = Math.max(...closes.slice(-Math.min(252, n)));
+  const dd   = (last - w52h) / w52h * 100;
+
+  return {
+    momScore, mrScore, volScore, vsScore, rsiScore, trendScore, composite,
+    rsi, rv30, vr, ret21, z,
+    ema20: ema(20), ema50: ema(50), ema100: ema(100), ema200: ema(200), vwap,
+    w52h, dd, uptrend: ema10arr[n-1] > ema10arr[n-6]
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GAME THEORY ENGINE
+═══════════════════════════════════════════════════════════ */
+function simulateGT(q) {
+  if (!q) return null;
+  const { rsi, rv30, vr, ret21, dd } = q;
+
+  const priceFell  = ret21 < -10;
+  const volSpiked  = vr > 1.4;
+  const instSig    = (priceFell && volSpiked) ? 'BUY' : (ret21 > 15 && vr < 0.8) ? 'SELL' : 'HOLD';
+  const retailSig  = rsi < 35 ? 'BUY' : rsi > 68 ? 'SELL' : 'HOLD';
+  const hlProxy    = rv30 / 100;
+  const mmSig      = hlProxy > 0.04 ? 'SELL' : hlProxy < 0.015 ? 'BUY' : 'HOLD';
+
+  const strats   = [instSig, retailSig, mmSig];
+  const votes    = { BUY: strats.filter(s=>s==='BUY').length, HOLD: strats.filter(s=>s==='HOLD').length, SELL: strats.filter(s=>s==='SELL').length };
+  const dominant = Object.keys(votes).sort((a,b) => votes[b]-votes[a])[0];
+  const strength = votes[dominant] / 3 * 100;
+  const neScore  = dominant==='BUY' ? Math.min(100, 70+strength*0.3) : dominant==='HOLD' ? 50 : Math.max(0, 30-strength*0.3);
+
+  const R = Math.max(1, -dd*0.5);
+  const T = Math.max(1, rv30*0.4);
+  const S = Math.max(1, -dd*0.8);
+  const P = Math.max(1, rv30*0.3);
+  const pdCoop  = S > T;
+  const pdLabel = pdCoop ? 'COOPERATE (BUY/HOLD)' : 'DEFECT (SELL)';
+  const pdScore = pdCoop ? Math.min(100, 60+(S-T)/(S+T+1e-9)*40)
+                         : Math.max(0,   40-(T-S)/(T+S+1e-9)*40);
+
+  const instN  = instSig==='BUY' ? 80 : instSig==='HOLD' ? 50 : 20;
+  const retN   = retailSig==='BUY' ? 80 : retailSig==='HOLD' ? 50 : 20;
+  const div    = Math.abs(instN - retN);
+  const divScore = (instSig==='BUY'&&retailSig==='SELL') ? Math.min(100,50+div*0.5)
+                 : (instSig==='SELL'&&retailSig==='BUY') ? Math.max(0,50-div*0.3) : 50;
+
+  const gtComp = neScore*0.40 + pdScore*0.35 + divScore*0.25;
+
+  return { instSig, retailSig, mmSig, dominant, strength, neScore, R, T, S, P, pdLabel, pdScore, div, divScore, gtComp };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MACD + RSI SERIES
+═══════════════════════════════════════════════════════════ */
+function simulateMACDRSI(hist) {
+  const closes = hist.map(d => d.c);
+  const n = closes.length;
+  const emaArr = (span) => {
+    const k = 2/(span+1); const out = [closes[0]];
+    for (let i=1;i<n;i++) out.push(closes[i]*k + out[i-1]*(1-k));
+    return out;
+  };
+  const ema12 = emaArr(12), ema26 = emaArr(26);
+  const macd  = ema12.map((v,i) => v - ema26[i]);
+  const kS = 2/10; const sig = [macd[0]];
+  for (let i=1;i<n;i++) sig.push(macd[i]*kS + sig[i-1]*(1-kS));
+  const histS = macd.map((v,i) => v - sig[i]);
+
+  const delta  = closes.map((c,i,a) => i ? c-a[i-1] : 0);
+  const gains  = delta.map(d => d>0?d:0);
+  const losses = delta.map(d => d<0?-d:0);
+  let ag = gains.slice(1,15).reduce((a,b)=>a+b,0)/14;
+  let al = losses.slice(1,15).reduce((a,b)=>a+b,0)/14;
+  const rsiArr = [50];
+  for (let i=15;i<n;i++) {
+    ag=(ag*13+gains[i])/14; al=(al*13+losses[i])/14;
+    rsiArr.push(100-100/(1+ag/(al+1e-9)));
+  }
+  return { macd, sig, hist: histS, rsi: rsiArr };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CHART HELPERS
+═══════════════════════════════════════════════════════════ */
+function destroyChart(inst) { if (inst) { try { inst.destroy(); } catch(e){} } }
+
+function renderPriceVolChart(hist, sym) {
+  const labels = hist.map(d => d.date);
+  const prices = hist.map(d => d.c);
+  const vols   = hist.map(d => d.v);
+  destroyChart(priceChartInst);
+  destroyChart(volChartInst);
+  priceChartInst = new Chart(document.getElementById('priceChart'), {
+    type: 'line',
+    data: { labels, datasets: [{
+      label: 'Price', data: prices, borderColor: '#1D9E75', borderWidth: 1.5,
+      pointRadius: 0, fill: true,
+      backgroundColor: (ctx) => {
+        const g = ctx.chart.ctx.createLinearGradient(0,0,0,160);
+        g.addColorStop(0,'rgba(29,158,117,0.2)'); g.addColorStop(1,'rgba(29,158,117,0)');
+        return g;
+      }
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { display: false }, y: { ticks: { font:{size:10}, callback: v => sym+v.toFixed(2) } } }
+    }
+  });
+  volChartInst = new Chart(document.getElementById('volChart'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label:'Volume', data:vols, backgroundColor:'rgba(24,95,165,0.45)', borderWidth:0 }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { display: false }, y: { ticks: { font:{size:10}, callback: v => v>=1e6?(v/1e6).toFixed(0)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':v } } }
+    }
+  });
+}
+
+function renderRadar(q) {
+  destroyChart(radarChartInst);
+  radarChartInst = new Chart(document.getElementById('radarChart'), {
+    type: 'radar',
+    data: {
+      labels: ['Momentum','Mean-Rev','Volatility','Vol Surge','RSI','Trend'],
+      datasets: [{
+        label: 'Score',
+        data: [q.momScore, q.mrScore, q.volScore, q.vsScore, q.rsiScore, q.trendScore],
+        backgroundColor: 'rgba(29,158,117,0.2)', borderColor:'#1D9E75',
+        borderWidth: 1.5, pointRadius: 3, pointBackgroundColor:'#1D9E75'
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { r: { min:0, max:100, ticks:{display:false}, pointLabels:{font:{size:10}} } }
+    }
+  });
+}
+
+function renderMACDRSI(hist) {
+  const ind    = simulateMACDRSI(hist);
+  const labels = hist.map(d => d.date);
+  destroyChart(macdChartInst);
+  destroyChart(rsiChartInst);
+  macdChartInst = new Chart(document.getElementById('macdChart'), {
+    type: 'bar',
+    data: { labels, datasets: [
+      { type:'line', label:'MACD',   data: ind.macd, borderColor:'#1D9E75', borderWidth:1.2, pointRadius:0 },
+      { type:'line', label:'Signal', data: ind.sig,  borderColor:'#D85A30', borderWidth:1.2, pointRadius:0, borderDash:[4,2] },
+      { label:'Hist', data: ind.hist, backgroundColor: ind.hist.map(v=>v>=0?'rgba(99,153,34,0.55)':'rgba(226,75,74,0.55)'), borderWidth:0 }
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{ display:false } },
+      scales: { x: { display:false } }
+    }
+  });
+  rsiChartInst = new Chart(document.getElementById('rsiChart'), {
+    type: 'line',
+    data: { labels, datasets: [
+      { data: ind.rsi, borderColor:'#185FA5', borderWidth:1.5, pointRadius:0, fill:false },
+      { data: Array(ind.rsi.length).fill(70), borderColor:'rgba(226,75,74,0.35)', borderWidth:1, borderDash:[4,3], pointRadius:0, fill:false },
+      { data: Array(ind.rsi.length).fill(30), borderColor:'rgba(99,153,34,0.35)', borderWidth:1, borderDash:[4,3], pointRadius:0, fill:false }
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{ display:false } },
+      scales: { x:{ display:false }, y:{ min:0, max:100, ticks:{font:{size:10}} } }
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN ANALYSIS
+═══════════════════════════════════════════════════════════ */
+async function runAnalysis() {
+  const raw = document.getElementById('tickerInput').value.trim().toUpperCase();
+  if (!raw) { alert('Please enter a ticker symbol'); return; }
+  const stocks = currentExchange === 'ASX' ? ASX_STOCKS : NSE_STOCKS;
+  const name   = stocks[raw] || raw;
+  const sym    = currentExchange === 'ASX' ? 'A$' : '₹';
+
+  loading(true, 'Fetching ' + raw + '...');
+  document.getElementById('heroSection').classList.add('hidden');
+  document.getElementById('mainContent').classList.add('hidden');
+
+  // Try to fetch from API first
+  const apiData = await fetchFromAPI(raw, 'max', currentExchange);
+  
+  if (apiData && apiData.status === 'success') {
+    // Use real data from Python backend
+    console.log('Using real data from API:', raw);
+    // History is already an array of prices
+    const rawHist = apiData.history.map((price, i) => ({
+      date: i,
+      c: parseFloat(price),
+      h: parseFloat(price) * 1.01,
+      l: parseFloat(price) * 0.99,
+      v: 1000000
+    }));
+    const q = apiData.quant_score || simulateQuant(rawHist);
+    const g = apiData.game_theory || simulateGT(q);
+    const fund = generateFundamentals(raw, sym);  // Generate simulated fundamentals
+    state = { hist: rawHist, quant: q, gt: g, raw, sym, name, apiData };
+    loading(false);
+    renderDashboard(rawHist, q, g, fund, raw, sym, name);
+  } else {
+    // Fall back to demo data
+    console.log('Using demo data for:', raw);
+    setTimeout(() => {
+      const hist = generateHist(raw + currentExchange);
+      const q    = simulateQuant(hist);
+      const g    = simulateGT(q);
+      const fund = generateFundamentals(raw, sym);
+      state = { hist, quant: q, gt: g, fund, raw, sym, name };
+      loading(false);
+      renderDashboard(hist, q, g, fund, raw, sym, name);
+    }, 500);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RENDER DASHBOARD
+═══════════════════════════════════════════════════════════ */
+function renderDashboard(hist, q, g, fund, ticker, sym, name) {
+  const last  = hist[hist.length - 1];
+  const prev  = hist[hist.length - 2];
+  const chg   = (last.c - prev.c) / prev.c * 100;
+  const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+
+  /* Hero */
+  document.getElementById('heroTicker').textContent = ticker + (currentExchange==='ASX'?'.AX':'.NS');
+  document.getElementById('heroName').textContent   = name;
+  document.getElementById('heroPrice').textContent  = fmtP(last.c, sym);
+  const cpEl = document.getElementById('heroChange');
+  cpEl.textContent = chgStr;
+  cpEl.style.background = chg >= 0 ? '#EAF3DE' : '#FCEBEB';
+  cpEl.style.color      = chg >= 0 ? '#27500A' : '#A32D2D';
+  document.getElementById('heroDate').textContent = last.date;
+  document.getElementById('heroSection').classList.remove('hidden');
+
+  /* Verdict */
+  const total = q ? q.composite*0.55 + g.gtComp*0.45 : 50;
+  const label = total>=75?'STRONG BUY':total>=60?'BUY':total>=45?'HOLD':total>=30?'SELL':'STRONG SELL';
+  const vb = document.getElementById('verdictBadge');
+  vb.textContent = label;
+  vb.className = 'verdict-badge vb-' + label.replace(' ','');
+  document.getElementById('vQuant').innerHTML = `<span style="color:${scoreColor(q.composite)};font-weight:700;">${q.composite.toFixed(1)}/100</span>`;
+  document.getElementById('vGT').innerHTML    = `<span style="color:${scoreColor(g.gtComp)};font-weight:700;">${g.gtComp.toFixed(1)}/100</span>`;
+  document.getElementById('vDD').innerHTML    = `<span class="${q.dd<-40?'dn':q.dd<-20?'neu':'up'}">${q.dd.toFixed(1)}%</span>`;
+  document.getElementById('vEMA').innerHTML   = q.uptrend ? '<span class="up">Uptrend</span>' : '<span class="dn">Downtrend</span>';
+
+  /* KPI row */
+  document.getElementById('kpiRow').innerHTML = [
+    ['52W High',   fmtP(q.w52h, sym), ''],
+    ['RSI (14)',   q.rsi.toFixed(1),   q.rsi<30?'up':q.rsi>70?'dn':''],
+    ['Vol Ratio',  q.vr.toFixed(2)+'x', q.vr>1.3?'up':q.vr<0.7?'dn':''],
+    ['Ann. Vol',   q.rv30.toFixed(1)+'%', q.rv30>50?'dn':q.rv30<20?'up':'']
+  ].map(([l,v,c]) => `<div class="card"><div class="card-title">${l}</div><div class="metric-val ${c}">${v}</div></div>`).join('');
+
+  /* Overview bars */
+  const setBar = (id, v) => { document.getElementById(id).style.width=v+'%'; document.getElementById(id).style.background=scoreBarColor(v); };
+  const setScore = (id, v) => { document.getElementById(id).textContent=v.toFixed(1); document.getElementById(id).style.color=scoreColor(v); };
+  setBar('ob-mom',q.momScore);   setScore('os-mom',q.momScore);
+  setBar('ob-mr', q.mrScore);    setScore('os-mr', q.mrScore);
+  setBar('ob-tr', q.trendScore); setScore('os-tr', q.trendScore);
+
+  /* Signal grid */
+  document.getElementById('sigGrid').innerHTML = [
+    ['MACD',       q.ret21>0?'Bullish':'Bearish'],
+    ['BB Position',q.z<-1?'Oversold':q.z>1?'Overbought':'Neutral'],
+    ['Volume',     q.vr>1.3?'Surge':'Normal'],
+    ['EMA-10 Trend',q.uptrend?'Uptrend':'Downtrend']
+  ].map(([k,v]) => `<div class="signal-row"><span class="signal-key">${k}</span>${tagHTML(v)}</div>`).join('');
+
+  /* MA table */
+  makeTable('maTable',[
+    ['EMA 20',  fmtP(q.ema20,sym)], ['EMA 50',  fmtP(q.ema50,sym)],
+    ['EMA 100', fmtP(q.ema100,sym)],['EMA 200', fmtP(q.ema200,sym)],
+    ['VWAP',    fmtP(q.vwap,sym)]
+  ]);
+
+  /* Charts */
+  renderPriceVolChart(hist, sym);
+
+  /* Quant pane */
+  makeBars('quantBars',[
+    ['Momentum',      q.momScore],   ['Mean-Reversion', q.mrScore],
+    ['Volatility',    q.volScore],   ['Volume Surge',   q.vsScore],
+    ['RSI Score',     q.rsiScore],   ['Trend Strength', q.trendScore],
+    ['▶ Composite',   q.composite]
+  ]);
+  makeTable('quantDetail',[
+    ['21d Return',   fmtPct(q.ret21), q.ret21>=0?'up':'dn'],
+    ['Z-Score',      q.z.toFixed(2), ''],
+    ['Realised Vol', q.rv30.toFixed(1)+'%', ''],
+    ['Vol Ratio',    q.vr.toFixed(2)+'x', ''],
+    ['RSI',          q.rsi.toFixed(1), q.rsi<30?'up':q.rsi>70?'dn':'']
+  ]);
+
+  /* Game Theory pane */
+  document.getElementById('nePlayers').innerHTML = [
+    ['Institutional', g.instSig],
+    ['Retail',        g.retailSig],
+    ['Market Maker',  g.mmSig]
+  ].map(([l,s]) => `<div class="ne-player"><div class="nep-label">${l}</div><div>${tagHTML(s)}</div></div>`).join('');
+
+  document.getElementById('neMatrix').innerHTML = [
+    ['Dominant Strategy', tagHTML(g.dominant)],
+    ['Equilibrium Strength', g.strength.toFixed(0)+'%'],
+    ['NE Score', `<span style="color:${scoreColor(g.neScore)};font-weight:700;">${g.neScore.toFixed(1)}</span>`],
+    ['Consensus', g.strength===100 ? tagHTML('Full NE') : tagHTML('Partial')]
+  ].map(([l,v])=>`<div class="gt-cell"><div class="gtc-label">${l}</div><div class="gtc-val">${v}</div></div>`).join('');
+
+  document.getElementById('divMatrix').innerHTML = [
+    ['Inst Signal',    tagHTML(g.instSig)],
+    ['Retail Signal',  tagHTML(g.retailSig)],
+    ['Divergence',     g.div + ' pts'],
+    ['Div Score',      `<span style="color:${scoreColor(g.divScore)};font-weight:700;">${g.divScore.toFixed(1)}</span>`]
+  ].map(([l,v])=>`<div class="gt-cell"><div class="gtc-label">${l}</div><div class="gtc-val">${v}</div></div>`).join('');
+
+  document.getElementById('pdMatrix').innerHTML = `
+    <div class="pd-matrix">
+      <div class="pdm-cell pdm-head"></div>
+      <div class="pdm-cell pdm-head">Market COOPERATES</div>
+      <div class="pdm-cell pdm-head">Market DEFECTS</div>
+      <div class="pdm-cell pdm-head">You BUY</div>
+      <div class="pdm-cell pdm-r">R = +${g.R.toFixed(1)}</div>
+      <div class="pdm-cell pdm-s">−S = −${g.S.toFixed(1)}</div>
+      <div class="pdm-cell pdm-head">You SELL</div>
+      <div class="pdm-cell pdm-t">+T = +${g.T.toFixed(1)}</div>
+      <div class="pdm-cell pdm-p">−P = −${g.P.toFixed(1)}</div>
+    </div>`;
+  document.getElementById('pdChoice').innerHTML = tagHTML(g.pdLabel);
+
+  makeBars('gtBars',[
+    ['NE Score',         g.neScore],
+    ['PD Score',         g.pdScore],
+    ['Divergence Score', g.divScore],
+    ['▶ GT Composite',   g.gtComp]
+  ]);
+
+  /* Fundamentals pane */
+  const fKeys = {
+    fundVal:    ['Market Cap','P/E (TTM)','Forward P/E','P/B Ratio','EV/EBITDA'],
+    fundProfit: ['Revenue','Gross Margin','Net Margin','ROE','ROA'],
+    fundBal:    ['Total Debt','Total Cash','Debt/Equity','Current Ratio'],
+    fundDiv:    ['Dividend Yield','Payout Ratio','EPS (TTM)','Target Price','Recommendation','Beta']
+  };
+  Object.entries(fKeys).forEach(([id, keys]) => {
+    document.getElementById(id).innerHTML = keys.map(k => `<tr><td>${k}</td><td>${fund[k]||'N/A'}</td></tr>`).join('');
+  });
+
+  /* Technicals pane */
+  makeTable('techOsc',[
+    ['RSI (14)',  q.rsi.toFixed(1),  q.rsi<30?'up':q.rsi>70?'dn':''],
+    ['Stoch %K', (40+q.rsi*0.5).toFixed(1), ''],
+    ['Williams %R', (-50-q.rsi*0.3).toFixed(1), ''],
+    ['MFI (14)', (45+q.vr*5).toFixed(1), ''],
+    ['ADX',      (20+Math.abs(q.z)*8).toFixed(1), '']
+  ]);
+  const bbMid = q.ema20;
+  const bbStd = bbMid * q.rv30/100 / Math.sqrt(252) * 10;
+  makeTable('techVol',[
+    ['BB Upper', fmtP(bbMid+2*bbStd, sym), ''],
+    ['BB Mid',   fmtP(bbMid, sym),          ''],
+    ['BB Lower', fmtP(bbMid-2*bbStd, sym), ''],
+    ['ATR',      fmtP(last.h - last.l, sym), ''],
+    ['Realised Vol', q.rv30.toFixed(1)+'%', '']
+  ]);
+
+  document.getElementById('mainContent').classList.remove('hidden');
+
+  /* Reset to overview tab */
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tnav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('pane-overview').classList.add('active');
+  document.querySelector('.tnav-btn').classList.add('active');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DEEP SCAN
+═══════════════════════════════════════════════════════════ */
+async function runScan() {
+  loading(true, 'Scanning exchange...');
+  const threshold = parseFloat(document.getElementById('scanThreshold').value);
+  const stocks    = currentExchange === 'ASX' ? ASX_STOCKS : NSE_STOCKS;
+  const sym       = currentExchange === 'ASX' ? 'A$' : '₹';
+
+  setTimeout(() => {
+    const matches = [];
+    Object.entries(stocks).forEach(([ticker, name]) => {
+      const hist = generateHist(ticker + currentExchange);
+      const q    = simulateQuant(hist);
+      if (!q) return;
+      if (q.dd <= -threshold && q.uptrend) {
+        const g     = simulateGT(q);
+        const total = q.composite*0.55 + g.gtComp*0.45;
+        matches.push({ ticker, name, q, g, total, last: hist[hist.length-1], hist });
+      }
+    });
+
+    loading(false);
+    document.getElementById('scanTitle').textContent =
+      `Deep scan: ${matches.length} stock${matches.length!==1?'s':''} matched ` +
+      `(${threshold.toFixed(0)}%+ drawdown + EMA-10 uptrend) — click row to deep-dive`;
+
+    if (!matches.length) {
+      document.getElementById('scanResults').innerHTML =
+        `<div style="font-size:12px;color:var(--c-muted);padding:24px 0;text-align:center;">No stocks matched. Try lowering the threshold.</div>`;
+      return;
+    }
+
+    matches.sort((a,b) => b.total - a.total);
+    state.scanMatches = matches;
+
+    document.getElementById('scanResults').innerHTML = `
+      <table class="scan-table">
+        <thead><tr>
+          <th>Ticker</th><th>Company</th><th>Price</th>
+          <th>Drawdown</th><th>Quant</th><th>GT</th><th>Score</th><th>Verdict</th>
+        </tr></thead>
+        <tbody>
+          ${matches.map(m => {
+            const lbl = m.total>=75?'STRONG BUY':m.total>=60?'BUY':m.total>=45?'HOLD':'SELL';
+            return `<tr onclick="loadFromScan('${m.ticker}')">
+              <td style="font-weight:700;">${m.ticker}</td>
+              <td style="color:var(--c-muted)">${m.name}</td>
+              <td>${sym}${m.last.c.toFixed(2)}</td>
+              <td class="dn">${m.q.dd.toFixed(1)}%</td>
+              <td style="color:${scoreColor(m.q.composite)};font-weight:500">${m.q.composite.toFixed(1)}</td>
+              <td style="color:${scoreColor(m.g.gtComp)};font-weight:500">${m.g.gtComp.toFixed(1)}</td>
+              <td style="color:${scoreColor(m.total)};font-weight:700">${m.total.toFixed(1)}</td>
+              <td>${tagHTML(lbl)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }, 700);
+}
+
+function loadFromScan(ticker) {
+  if (!state.scanMatches) return;
+  const m = state.scanMatches.find(x => x.ticker === ticker);
+  if (!m) return;
+  const sym  = currentExchange === 'ASX' ? 'A$' : '₹';
+  const fund = generateFundamentals(ticker, sym);
+  state = { ...state, hist:m.hist, quant:m.q, gt:m.g, fund, raw:ticker, sym, name:m.name };
+  setView('single', document.querySelector('.mode-pill button'));
+  document.getElementById('tickerInput').value = ticker;
+  renderDashboard(m.hist, m.q, m.g, fund, ticker, sym, m.name);
+}
+
+/* ── Allow Enter key in ticker input ── */
+document.getElementById('tickerInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runAnalysis();
+});
+</script>
+</body>
+</html>
