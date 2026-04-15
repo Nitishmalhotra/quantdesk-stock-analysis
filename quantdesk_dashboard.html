@@ -2,8 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>QuantDesk — ASX &amp; NSE Stock Analysis Dashboard</title>
+<title>QuantDesk v20260415-1221 — ASX &amp; NSE Stock Analysis Dashboard</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;700;800&display=swap');
 
@@ -302,6 +305,46 @@
   }
 
   .hidden { display: none !important; }
+
+  .btn-settings {
+    padding: 5px 10px; background: transparent; color: var(--c-muted);
+    border: 0.5px solid var(--c-border); border-radius: 6px; font-size: 14px;
+    cursor: pointer; font-family: var(--mono); transition: all 0.15s; line-height: 1;
+  }
+  .btn-settings:hover { background: var(--c-surface); color: var(--c-text); }
+
+  /* ── ETF Screener ── */
+  .etf-config {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 14px;
+    background: var(--c-card); border: 0.5px solid var(--c-border);
+    border-radius: var(--radius-lg); margin-bottom: 14px;
+    font-size: 12px; color: var(--c-muted);
+  }
+  .etf-config select, .etf-config input[type=text] {
+    padding: 5px 8px; font-size: 12px; font-family: var(--mono);
+    border: 0.5px solid var(--c-border); border-radius: 6px;
+    background: var(--c-surface); color: var(--c-text); outline: none;
+  }
+  .etf-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .etf-table thead tr { border-bottom: 1px solid var(--c-border); }
+  .etf-table th {
+    padding: 7px 8px; text-align: left; font-size: 10px; font-weight: 500;
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--c-hint);
+    white-space: nowrap;
+  }
+  .etf-table td { padding: 7px 8px; border-bottom: 0.5px solid var(--c-border); white-space: nowrap; }
+  .etf-table tbody tr:hover { background: var(--c-surface); cursor: pointer; }
+  .etf-table tbody tr:last-child td { border-bottom: none; }
+  .score-bar-wrap { display: flex; align-items: center; gap: 6px; }
+  .score-bar-mini { height: 5px; border-radius: 3px; }
+  .etf-signal-wrap { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .etf-signal-chip {
+    font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: 500;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .etf-title { font-family: var(--display); font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .etf-subtitle { font-size: 11px; color: var(--c-muted); margin-bottom: 14px; }
 </style>
 </head>
 <body>
@@ -309,7 +352,7 @@
 
   <!-- ── Top bar ── -->
   <div class="topbar">
-    <div class="topbar-logo">QUANT<span>DESK</span></div>
+    <div class="topbar-logo">QUANT<span>DESK</span> <span style="font-size:9px;color:var(--c-muted);font-weight:400;">v20260415-1221</span></div>
     <div class="exchange-tabs">
       <button class="etab active" onclick="setExchange('ASX',this)">ASX</button>
       <button class="etab"        onclick="setExchange('NSE',this)">NSE Stocks</button>
@@ -328,7 +371,9 @@
     <div class="mode-pill" id="modePill">
       <button class="active" onclick="setView('single',this)">Single</button>
       <button onclick="setView('scan',this)">Deep Scan</button>
+      <button onclick="setView('etf',this)">ETF Screener</button>
     </div>
+    <button class="btn-settings" onclick="openSettings()" title="Configure API server URL">&#9881;</button>
   </div>
 
   <!-- ── Scan config bar ── -->
@@ -346,6 +391,41 @@
     <span id="loadingText">Fetching data...</span>
   </div>
 
+
+  <!-- ══════════════════════ ETF SCREENER VIEW ══════════════════════ -->
+  <div id="etfView" class="hidden">
+    <div class="etf-config">
+      <span>Benchmark</span>
+      <select id="etfBenchmark">
+        <option value="SPY">SPY (S&amp;P 500)</option>
+        <option value="QQQ">QQQ (NASDAQ)</option>
+        <option value="EWA">EWA (ASX)</option>
+      </select>
+      <span>Period</span>
+      <select id="etfPeriod">
+        <option value="3mo">3 Months</option>
+        <option value="6mo" selected>6 Months</option>
+        <option value="1y">1 Year</option>
+      </select>
+      <span>Min Score</span>
+      <select id="etfMinScore">
+        <option value="0">All</option>
+        <option value="50" selected>50+</option>
+        <option value="60">60+</option>
+        <option value="70">70+</option>
+      </select>
+      <button class="btn-scan" onclick="runETFScan()">Run ETF Scan ↗</button>
+      <span id="etfStatus" style="color:var(--c-muted);font-size:11px;"></span>
+    </div>
+
+    <div id="etfResults">
+      <div style="text-align:center;padding:48px;font-size:13px;color:var(--c-muted);">
+        Click <strong>Run ETF Scan</strong> to screen 36 iShares &amp; sector ETFs.<br/>
+        <span style="font-size:11px;">Requires API server to be connected — or uses demo data in offline mode.</span>
+      </div>
+    </div>
+  </div>
+
   <!-- ══════════════════════ SINGLE VIEW ══════════════════════ -->
   <div id="singleView">
 
@@ -361,6 +441,7 @@
           <div>
             <span id="heroChange" class="change-pill">—</span>
             <span style="font-size:11px;color:var(--c-hint);margin-left:6px;" id="heroDate">—</span>
+            <span id="liveDataBadge" style="font-size:10px;font-weight:600;margin-left:6px;letter-spacing:0.5px;color:var(--c-muted);">◌ DEMO</span>
           </div>
         </div>
       </div>
@@ -614,6 +695,10 @@ function setView(v, btn) {
   document.getElementById('scanConfig').classList.toggle('hidden', v !== 'scan');
   document.getElementById('singleView').classList.toggle('hidden', v !== 'single');
   document.getElementById('scanView').classList.toggle('hidden', v !== 'scan');
+  document.getElementById('etfView').classList.toggle('hidden', v !== 'etf');
+  // hide search bar when on ETF view
+  document.querySelector('.search-row').style.opacity = v === 'etf' ? '0.35' : '1';
+  document.querySelector('.search-row').style.pointerEvents = v === 'etf' ? 'none' : '';
 }
 
 function showPane(id, btn) {
@@ -633,11 +718,30 @@ function loading(show, text) {
 /* ═══════════════════════════════════════════════════════════
    API CONNECTION  (Fetch data from Python backend)
 ═══════════════════════════════════════════════════════════ */
-const API_BASE = 'http://localhost:8000';
+// ─── API Base URL ──────────────────────────────────────────────────────────
+// Set to your Railway URL after deploy, e.g. https://quantdesk.up.railway.app
+// Leave '' for demo-only mode. Change at runtime via the ⚙ button.
+const API_BASE_DEFAULT = '';   // ← PASTE your Railway URL here after deploy
+let API_BASE = localStorage.getItem('qd_api_base') || API_BASE_DEFAULT;
+
+// Auto-detect localhost:8000 when no API_BASE is configured
+let _resolvedBase = undefined;
+async function resolveAPIBase() {
+  if (_resolvedBase !== undefined) return _resolvedBase;
+  if (API_BASE) { _resolvedBase = API_BASE; return API_BASE; }
+  try {
+    const res = await fetch('http://localhost:8000/health', { signal: AbortSignal.timeout(2000) });
+    if (res.ok) { _resolvedBase = 'http://localhost:8000'; return _resolvedBase; }
+  } catch (_) {}
+  _resolvedBase = null;
+  return null;
+}
 
 async function fetchFromAPI(ticker, period='1y', market='ASX') {
   try {
-    const response = await fetch(`${API_BASE}/api/stock?ticker=${ticker}&period=${period}&market=${market}`);
+    const base = await resolveAPIBase();
+    if (!base) return null;
+    const response = await fetch(`${base}/api/stock?ticker=${ticker}&period=${period}&market=${market}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     if (data.status !== 'success') throw new Error(data.error || 'API error');
@@ -650,7 +754,9 @@ async function fetchFromAPI(ticker, period='1y', market='ASX') {
 
 async function scanFromAPI(threshold=40, market='ASX') {
   try {
-    const response = await fetch(`${API_BASE}/api/scan?threshold=${threshold}&market=${market}`);
+    const base = await resolveAPIBase();
+    if (!base) return null;
+    const response = await fetch(`${base}/api/scan?threshold=${threshold}&market=${market}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     if (data.status !== 'success') throw new Error(data.error || 'API error');
@@ -1015,29 +1121,78 @@ async function runAnalysis() {
   document.getElementById('heroSection').classList.add('hidden');
   document.getElementById('mainContent').classList.add('hidden');
 
-  // Try to fetch from API first
-  const apiData = await fetchFromAPI(raw, 'max', currentExchange);
-  
+  const period = document.getElementById('periodSelect').value || '1y';
+  const apiData = await fetchFromAPI(raw, period, currentExchange);
+
   if (apiData && apiData.status === 'success') {
-    // Use real data from Python backend
-    console.log('Using real data from API:', raw);
-    // History is already an array of prices
-    const rawHist = apiData.history.map((price, i) => ({
-      date: i,
-      c: parseFloat(price),
-      h: parseFloat(price) * 1.01,
-      l: parseFloat(price) * 0.99,
-      v: 1000000
-    }));
-    const q = apiData.quant_score || simulateQuant(rawHist);
-    const g = apiData.game_theory || simulateGT(q);
-    const fund = generateFundamentals(raw, sym);  // Generate simulated fundamentals
+    console.log('✓ Live data for:', raw);
+    const prices  = apiData.history || [];
+    const apidates = apiData.dates  || [];
+    const today   = new Date();
+    const rawHist = prices.map((price, i) => {
+      let dateStr = apidates[i];
+      if (!dateStr) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - (prices.length - 1 - i));
+        dateStr = d.toISOString().slice(0, 10);
+      }
+      return { date: dateStr, c: parseFloat(price), h: parseFloat(price)*1.005, l: parseFloat(price)*0.995, v: 1000000 };
+    });
+
+    // Map API quant keys → dashboard object (handles both camelCase and raw Python keys)
+    const aq = apiData.quant_score || {};
+    const q = {
+      momScore:   parseFloat(aq.momScore   ?? 50),
+      mrScore:    parseFloat(aq.mrScore    ?? 50),
+      volScore:   parseFloat(aq.volScore   ?? 50),
+      vsScore:    parseFloat(aq.vsScore    ?? 50),
+      rsiScore:   parseFloat(aq.rsiScore   ?? 50),
+      trendScore: parseFloat(aq.trendScore ?? 50),
+      composite:  parseFloat(aq.composite  ?? 50),
+      rsi:        parseFloat(aq.rsi        ?? 50),
+      rv30:       parseFloat(aq.rv30       ?? 25),
+      vr:         parseFloat(aq.vr         ?? 1.0),
+      ret21:      parseFloat(aq.ret21      ?? 0),
+      z:          parseFloat(aq.z          ?? 0),
+      ema20:      parseFloat(aq.ema20      ?? rawHist.slice(-1)[0]?.c ?? 0),
+      ema50:      parseFloat(aq.ema50      ?? rawHist.slice(-1)[0]?.c ?? 0),
+      ema100:     parseFloat(aq.ema100     ?? rawHist.slice(-1)[0]?.c ?? 0),
+      ema200:     parseFloat(aq.ema200     ?? rawHist.slice(-1)[0]?.c ?? 0),
+      vwap:       parseFloat(aq.vwap       ?? rawHist.slice(-1)[0]?.c ?? 0),
+      w52h:       parseFloat(aq.w52h       ?? 0) || Math.max(...rawHist.map(h=>h.c)),
+      dd:         parseFloat(aq.dd         ?? 0),
+      uptrend:    aq.uptrend === 1 || aq.uptrend === true
+    };
+    // Replace any NaN with simulated fallback
+    const qSim = simulateQuant(rawHist) || {};
+    Object.keys(q).forEach(k => { if (typeof q[k]==='number' && isNaN(q[k])) q[k] = qSim[k] ?? 50; });
+
+    // Map API game-theory keys → dashboard GT object
+    const ag = apiData.game_theory || {};
+    const g = ag.gtComp != null ? {
+      instSig:   ag.instSig   || 'HOLD',
+      retailSig: ag.retailSig || 'HOLD',
+      mmSig:     ag.mmSig     || 'HOLD',
+      dominant:  ag.dominant  || 'HOLD',
+      strength:  parseFloat(ag.strength  ?? 50),
+      neScore:   parseFloat(ag.neScore   ?? 50),
+      R:         parseFloat(ag.R         ?? 1),
+      T:         parseFloat(ag.T         ?? 1),
+      S:         parseFloat(ag.S         ?? 1),
+      P:         parseFloat(ag.P         ?? 1),
+      pdLabel:   ag.pdLabel  || 'HOLD',
+      pdScore:   parseFloat(ag.pdScore   ?? 50),
+      div:       parseFloat(ag.div       ?? 0),
+      divScore:  parseFloat(ag.divScore  ?? 50),
+      gtComp:    parseFloat(ag.gtComp    ?? 50)
+    } : simulateGT(q);
+
+    const fund = generateFundamentals(raw, sym);
     state = { hist: rawHist, quant: q, gt: g, raw, sym, name, apiData };
     loading(false);
-    renderDashboard(rawHist, q, g, fund, raw, sym, name);
+    renderDashboard(rawHist, q, g, fund, raw, sym, name, apiData);
   } else {
-    // Fall back to demo data
-    console.log('Using demo data for:', raw);
+    console.log('⚠ Demo mode for:', raw);
     setTimeout(() => {
       const hist = generateHist(raw + currentExchange);
       const q    = simulateQuant(hist);
@@ -1045,29 +1200,33 @@ async function runAnalysis() {
       const fund = generateFundamentals(raw, sym);
       state = { hist, quant: q, gt: g, fund, raw, sym, name };
       loading(false);
-      renderDashboard(hist, q, g, fund, raw, sym, name);
-    }, 500);
+      renderDashboard(hist, q, g, fund, raw, sym, name, null);
+    }, 400);
   }
 }
 
 /* ═══════════════════════════════════════════════════════════
    RENDER DASHBOARD
 ═══════════════════════════════════════════════════════════ */
-function renderDashboard(hist, q, g, fund, ticker, sym, name) {
+function renderDashboard(hist, q, g, fund, ticker, sym, name, apiData) {
   const last  = hist[hist.length - 1];
   const prev  = hist[hist.length - 2];
-  const chg   = (last.c - prev.c) / prev.c * 100;
-  const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+  const realPrice = (apiData && apiData.price != null) ? apiData.price : last.c;
+  const realChg   = (apiData && apiData.day_change != null) ? apiData.day_change : (last.c - prev.c) / prev.c * 100;
+  const chgStr    = (realChg >= 0 ? '+' : '') + realChg.toFixed(2) + '%';
+  const isLive    = !!(apiData && apiData.status === 'success');
 
   /* Hero */
   document.getElementById('heroTicker').textContent = ticker + (currentExchange==='ASX'?'.AX':'.NS');
   document.getElementById('heroName').textContent   = name;
-  document.getElementById('heroPrice').textContent  = fmtP(last.c, sym);
+  document.getElementById('heroPrice').textContent  = fmtP(realPrice, sym);
   const cpEl = document.getElementById('heroChange');
   cpEl.textContent = chgStr;
-  cpEl.style.background = chg >= 0 ? '#EAF3DE' : '#FCEBEB';
-  cpEl.style.color      = chg >= 0 ? '#27500A' : '#A32D2D';
+  cpEl.style.background = realChg >= 0 ? '#EAF3DE' : '#FCEBEB';
+  cpEl.style.color      = realChg >= 0 ? '#27500A' : '#A32D2D';
   document.getElementById('heroDate').textContent = last.date;
+  const liveBadge = document.getElementById('liveDataBadge');
+  if (liveBadge) { liveBadge.textContent = isLive ? '● LIVE' : '◌ DEMO'; liveBadge.style.color = isLive ? '#1D9E75' : '#BA7517'; }
   document.getElementById('heroSection').classList.remove('hidden');
 
   /* Verdict */
@@ -1286,6 +1445,156 @@ function loadFromScan(ticker) {
 document.getElementById('tickerInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') runAnalysis();
 });
+
+/* ═══════════════════════════════════════════════════════════
+   ETF SCREENER
+═══════════════════════════════════════════════════════════ */
+const ETF_DEMO_DATA = [
+  { ticker:'IAU',  name:'iShares Gold Trust',              price:'42.85', score:72, signal:'BUY',       rsi:'63.4', ret1m:'+5.2%', ret3m:'+12.0%', volRatio:'1.3x', relStr:'+7.0' },
+  { ticker:'URA',  name:'Global X Uranium ETF',            price:'29.74', score:70, signal:'BUY',       rsi:'61.2', ret1m:'+6.1%', ret3m:'+14.3%', volRatio:'1.5x', relStr:'+8.1' },
+  { ticker:'EWZ',  name:'iShares MSCI Brazil',             price:'28.42', score:68, signal:'BUY',       rsi:'58.3', ret1m:'+4.2%', ret3m:'+9.1%',  volRatio:'1.2x', relStr:'+6.2' },
+  { ticker:'EWT',  name:'iShares MSCI Taiwan',             price:'51.18', score:65, signal:'BUY',       rsi:'55.1', ret1m:'+3.8%', ret3m:'+11.2%', volRatio:'1.1x', relStr:'+5.8' },
+  { ticker:'COPX', name:'Global X Copper Miners',          price:'35.21', score:62, signal:'WEAK BUY',  rsi:'54.7', ret1m:'+2.9%', ret3m:'+7.4%',  volRatio:'1.0x', relStr:'+3.4' },
+  { ticker:'EWC',  name:'iShares MSCI Canada',             price:'38.90', score:60, signal:'WEAK BUY',  rsi:'52.8', ret1m:'+1.9%', ret3m:'+5.2%',  volRatio:'0.9x', relStr:'+2.2' },
+  { ticker:'EWJ',  name:'iShares MSCI Japan',              price:'65.40', score:58, signal:'WEAK BUY',  rsi:'51.0', ret1m:'+1.4%', ret3m:'+4.6%',  volRatio:'0.9x', relStr:'+1.6' },
+  { ticker:'EEM',  name:'iShares MSCI Emerging Markets',   price:'41.22', score:54, signal:'HOLD',      rsi:'49.5', ret1m:'+0.8%', ret3m:'+3.1%',  volRatio:'0.8x', relStr:'+0.8' },
+  { ticker:'EZU',  name:'iShares MSCI Eurozone',           price:'49.15', score:50, signal:'HOLD',      rsi:'47.3', ret1m:'-0.4%', ret3m:'+1.8%',  volRatio:'0.8x', relStr:'-0.4' },
+  { ticker:'EWG',  name:'iShares MSCI Germany',            price:'31.67', score:48, signal:'HOLD',      rsi:'46.2', ret1m:'-0.9%', ret3m:'+0.7%',  volRatio:'0.7x', relStr:'-0.9' },
+  { ticker:'EWY',  name:'iShares MSCI South Korea',        price:'58.34', score:44, signal:'WEAK SELL', rsi:'44.8', ret1m:'-1.8%', ret3m:'-0.5%',  volRatio:'0.7x', relStr:'-1.5' },
+  { ticker:'TUR',  name:'iShares MSCI Turkey',             price:'34.10', score:40, signal:'WEAK SELL', rsi:'42.1', ret1m:'-3.2%', ret3m:'-5.8%',  volRatio:'0.6x', relStr:'-3.8' },
+  { ticker:'EWW',  name:'iShares MSCI Mexico',             price:'47.50', score:38, signal:'SELL',      rsi:'39.4', ret1m:'-4.1%', ret3m:'-8.2%',  volRatio:'0.5x', relStr:'-5.1' },
+  { ticker:'TQQQ', name:'ProShares UltraPro QQQ',          price:'42.75', score:34, signal:'SELL',      rsi:'37.0', ret1m:'-5.8%', ret3m:'-12.4%', volRatio:'1.8x', relStr:'-9.4' },
+];
+
+async function fetchETFScan(base, benchmark, period) {
+  const res = await fetch(`${base}/api/etf/scan?benchmark=${benchmark}&period=${period}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.status !== 'success') throw new Error(data.error || 'API error');
+  return data.results || [];
+}
+
+function renderETFTable(results, minScore, isDemo) {
+  const filtered = results.filter(r => (r.score || 0) >= minScore);
+  if (!filtered.length) return `<div style="text-align:center;padding:40px;color:var(--c-muted);font-size:13px;">No ETFs matched minimum score of ${minScore}.</div>`;
+
+  const counts = {};
+  filtered.forEach(r => { const s = r.signal||'HOLD'; counts[s]=(counts[s]||0)+1; });
+  const chipOrder = ['STRONG BUY','BUY','WEAK BUY','HOLD','WEAK SELL','SELL','STRONG SELL'];
+  const chipColors = { 'STRONG BUY':'#27500A','BUY':'#3a7a1a','WEAK BUY':'#5a9a2a','HOLD':'#8a6a10','WEAK SELL':'#c04a20','SELL':'#a03010','STRONG SELL':'#801808' };
+  let chips = '<div class="etf-signal-wrap">';
+  chipOrder.forEach(sig => { if (counts[sig]) chips += `<span class="etf-signal-chip" style="background:${chipColors[sig]}20;color:${chipColors[sig]};border:1px solid ${chipColors[sig]}40;">${sig} <strong>${counts[sig]}</strong></span>`; });
+  chips += '</div>';
+
+  if (isDemo) chips += `<div style="font-size:11px;color:var(--c-warn);margin-bottom:10px;">⚠ Demo data — run <code>python api_server.py</code> then click Run ETF Scan to get live results.</div>`;
+
+  const rows = filtered.map(r => {
+    const score = r.score || 0;
+    const c1 = (r.ret1m||'').startsWith('+') ? 'color:#3a7a1a' : (r.ret1m||'').startsWith('-') ? 'color:#c04a20' : '';
+    const c3 = (r.ret3m||'').startsWith('+') ? 'color:#3a7a1a' : (r.ret3m||'').startsWith('-') ? 'color:#c04a20' : '';
+    return `<tr>
+      <td><strong>${r.ticker}</strong></td>
+      <td style="color:var(--c-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;">${r.name||'—'}</td>
+      <td style="text-align:right;">${r.price != null ? '$'+Number(r.price).toFixed(2) : '—'}</td>
+      <td style="text-align:right;">
+        <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
+          <div style="width:40px;height:5px;border-radius:3px;background:var(--c-border);overflow:hidden;">
+            <div style="width:${score}%;height:100%;background:${scoreBarColor(score)};border-radius:3px;"></div>
+          </div>
+          <span style="color:${scoreColor(score)};font-weight:600;">${score}</span>
+        </div>
+      </td>
+      <td><span class="tag ${tagClass(r.signal)}">${r.signal||'—'}</span></td>
+      <td style="text-align:right;">${r.rsi != null ? Number(r.rsi).toFixed(1) : '—'}</td>
+      <td style="text-align:right;${c1}">${r.ret1m||'—'}</td>
+      <td style="text-align:right;${c3}">${r.ret3m||'—'}</td>
+      <td style="text-align:right;color:var(--c-muted);">${r.volRatio||'—'}</td>
+      <td style="text-align:right;color:var(--c-muted);">${r.relStr||'—'}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="etf-title">ETF Scan Results</div>
+    <div class="etf-subtitle">${filtered.length} ETFs · Sorted by Score</div>
+    ${chips}
+    <div style="overflow-x:auto;">
+      <table class="etf-table">
+        <thead><tr>
+          <th>Ticker</th><th>Name</th><th style="text-align:right;">Price</th>
+          <th style="text-align:right;">Score</th><th>Signal</th>
+          <th style="text-align:right;">RSI</th><th style="text-align:right;">1M</th>
+          <th style="text-align:right;">3M</th><th style="text-align:right;">Vol Ratio</th>
+          <th style="text-align:right;">Rel Str</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+async function runETFScan() {
+  const benchmark = document.getElementById('etfBenchmark').value;
+  const period    = document.getElementById('etfPeriod').value;
+  const minScore  = parseInt(document.getElementById('etfMinScore').value) || 0;
+  const statusEl  = document.getElementById('etfStatus');
+  const resultsEl = document.getElementById('etfResults');
+
+  statusEl.textContent = '⏳ Scanning…';
+  resultsEl.innerHTML  = '<div style="text-align:center;padding:48px;color:var(--c-muted);font-size:13px;">⏳ Fetching live data…</div>';
+
+  const base = await resolveAPIBase();
+  let results = null;
+  let isDemo  = false;
+
+  if (base) {
+    try {
+      results = await fetchETFScan(base, benchmark, period);
+      statusEl.textContent = `✓ Live · ${results.length} ETFs · ${benchmark} · ${period}`;
+    } catch (err) {
+      console.warn('ETF API error:', err.message);
+    }
+  }
+
+  if (!results) {
+    isDemo  = true;
+    results = ETF_DEMO_DATA;
+    statusEl.textContent = `⚠ Demo mode · ${results.length} ETFs`;
+  }
+
+  results.sort((a, b) => (b.score||0) - (a.score||0));
+  resultsEl.innerHTML = renderETFTable(results, minScore, isDemo);
+}
+
 </script>
+
+  <!-- ── Settings Modal ── -->
+  <div id="settingsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:999;align-items:center;justify-content:center;">
+    <div style="background:var(--c-card);border:0.5px solid var(--c-border);border-radius:12px;padding:24px;max-width:420px;width:90%;font-family:var(--mono);">
+      <div style="font-family:var(--display);font-weight:700;font-size:15px;margin-bottom:6px;">API Server</div>
+      <div style="font-size:11px;color:var(--c-muted);margin-bottom:14px;line-height:1.6;">
+        Paste your Railway backend URL to enable live data.<br/>Leave blank for demo mode (simulated data).
+      </div>
+      <label style="font-size:11px;color:var(--c-hint);display:block;margin-bottom:4px;">BACKEND URL</label>
+      <input id="apiUrlInput" type="text" placeholder="https://your-app.up.railway.app"
+        style="width:100%;padding:8px 10px;font-size:12px;font-family:var(--mono);
+               border:0.5px solid var(--c-border);border-radius:6px;
+               background:var(--c-surface);color:var(--c-text);outline:none;margin-bottom:10px;" />
+      <div id="apiStatus" style="font-size:11px;margin-bottom:14px;min-height:16px;color:var(--c-muted);"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button onclick="testAPIConnection()" style="padding:6px 14px;font-size:11px;font-family:var(--mono);
+          background:var(--c-surface);border:0.5px solid var(--c-border);border-radius:6px;cursor:pointer;color:var(--c-text);">
+          Test Connection
+        </button>
+        <button onclick="closeSettings()" style="padding:6px 14px;font-size:11px;font-family:var(--mono);
+          background:transparent;border:0.5px solid var(--c-border);border-radius:6px;cursor:pointer;color:var(--c-muted);">
+          Cancel
+        </button>
+        <button onclick="saveSettings()" style="padding:6px 16px;font-size:11px;font-family:var(--mono);
+          background:var(--c-accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:500;">
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

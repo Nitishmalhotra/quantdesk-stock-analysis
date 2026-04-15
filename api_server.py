@@ -35,6 +35,8 @@ fetch_stock_nse = None
 quant_score_nse = None
 game_theory_score_nse = None
 NIFTY50_STOCKS = {}
+EnhancedETFScreener = None
+ETF_LIST = []
 
 def load_modules():
     global _MODULES_LOADED, fetch_stock, quant_score, game_theory_score, ASX_STOCKS
@@ -55,6 +57,20 @@ def load_modules():
         quant_score_nse = qsn
         game_theory_score_nse = gsn
         NIFTY50_STOCKS = nstocks
+        # Load ETF screener
+        try:
+            from etf_screener import EnhancedETFScreener as ETFS
+            global EnhancedETFScreener, ETF_LIST
+            EnhancedETFScreener = ETFS
+            ETF_LIST = [
+                "EWS","EWZ","EWL","EWZS","EWT","EEM","EWW","EWQ","EWH","EWN",
+                "EWK","EWG","ECH","EWC","TUR","EWA","GREK","EWD","EWI","COLO",
+                "ARGT","EWJ","EWY","EWP","EPHE","ENZL","EZA","COPX","URA","PICK",
+                "EZU","IAU","TQQQ","VNM","EWO","EWU",
+            ]
+        except Exception as etf_err:
+            print(f"ETF screener not loaded (optional): {etf_err}")
+
         _MODULES_LOADED = True
         return True
     except Exception as e:
@@ -103,6 +119,14 @@ class APIHandler(BaseHTTPRequestHandler):
             elif path == "/api/stocks/list":
                 market = query.get("market", ["ASX"])[0].upper()
                 response = self._list_stocks(market)
+
+            elif path == "/api/etf/scan":
+                benchmark = query.get("benchmark", ["SPY"])[0]
+                period    = query.get("period", ["6mo"])[0]
+                response  = self._scan_etfs(benchmark, period)
+
+            elif path == "/api/etf/list":
+                response = {"status": "success", "etfs": ETF_LIST, "count": len(ETF_LIST)}
 
             else:
                 self.send_error(404, "Endpoint not found")
@@ -232,7 +256,8 @@ class APIHandler(BaseHTTPRequestHandler):
                     "period": period,
                     "quant_score": q_transformed,
                     "game_theory": g_transformed,
-                    "history": [float(x) for x in hist["Close"].tail(30).tolist()]
+                    "history": [float(x) for x in hist["Close"].tolist()],
+                    "dates": [str(d.date()) for d in hist.index.tolist()]
                 }
             
             elif market == "NSE":
@@ -260,7 +285,8 @@ class APIHandler(BaseHTTPRequestHandler):
                     "period": period,
                     "quant_score": q_transformed,
                     "game_theory": g_transformed,
-                    "history": [float(x) for x in hist["Close"].tail(30).tolist()]
+                    "history": [float(x) for x in hist["Close"].tolist()],
+                    "dates": [str(d.date()) for d in hist.index.tolist()]
                 }
         
         except Exception as e:
@@ -318,6 +344,56 @@ class APIHandler(BaseHTTPRequestHandler):
             traceback.print_exc()
             return {"error": str(e), "status": "error"}
 
+
+    def _scan_etfs(self, benchmark="SPY", period="6mo"):
+        """Run ETF screener and return results as JSON."""
+        try:
+            if EnhancedETFScreener is None:
+                return {"error": "ETF screener module not loaded", "status": "error"}
+
+            screener = EnhancedETFScreener(ETF_LIST, period=period, interval="1d", benchmark=benchmark)
+            screener.scan()
+
+            if not screener.results:
+                return {"status": "success", "results": [], "count": 0}
+
+            # Normalise keys to camelCase for JS
+            results = []
+            for r in screener.results:
+                results.append({
+                    "ticker":   r.get("Ticker", ""),
+                    "name":     r.get("Name", ""),
+                    "price":    str(r.get("Price", "")).replace("$", ""),
+                    "score":    int(r.get("Score", 50)),
+                    "signal":   r.get("Signal", "HOLD"),
+                    "strength": int(r.get("Strength", 0)),
+                    "rsi":      str(r.get("RSI", "—")),
+                    "macd":     str(r.get("MACD", "—")),
+                    "adx":      str(r.get("ADX", "—")),
+                    "stoch":    str(r.get("Stoch", "—")),
+                    "volRatio": str(r.get("Vol_Ratio", "—")),
+                    "relStr":   str(r.get("Rel_Str", "—")),
+                    "vol":      str(r.get("Volatility", "—")),
+                    "sharpe":   str(r.get("Sharpe", "—")),
+                    "maxDD":    str(r.get("MaxDD", "—")),
+                    "ret1m":    str(r.get("1M", "—")),
+                    "ret3m":    str(r.get("3M", "—")),
+                    "ret6m":    str(r.get("6M", "—")),
+                })
+
+            return {
+                "status":    "success",
+                "benchmark": benchmark,
+                "period":    period,
+                "results":   sorted(results, key=lambda x: x["score"], reverse=True),
+                "count":     len(results),
+            }
+
+        except Exception as e:
+            print(f"ETF scan error: {e}")
+            traceback.print_exc()
+            return {"error": str(e), "status": "error"}
+
     def _list_stocks(self, market):
         """List all available stocks for a market."""
         if market == "ASX":
@@ -335,6 +411,7 @@ class APIHandler(BaseHTTPRequestHandler):
 
 def run_server(port=8000):
     """Start the API server."""
+    port = int(os.environ.get("PORT", port))  # Railway injects PORT
     server_address = ("", port)
     httpd = HTTPServer(server_address, APIHandler)
     
@@ -347,6 +424,8 @@ def run_server(port=8000):
     print(f"  • GET /api/stock?ticker=CBA&period=1y&market=ASX")
     print(f"  • GET /api/scan?threshold=40&market=ASX")
     print(f"  • GET /api/stocks/list?market=ASX")
+    print(f"  • GET /api/etf/scan?benchmark=SPY&period=6mo")
+    print(f"  • GET /api/etf/list")
     print(f"\n  Press Ctrl+C to stop.\n")
     
     try:
